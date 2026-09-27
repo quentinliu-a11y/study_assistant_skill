@@ -1,0 +1,2 @@
+# Python 3.11+; IANA timezone data for platforms without a system database.
+tzdata>=2025.2

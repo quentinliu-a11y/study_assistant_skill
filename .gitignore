@@ -1,0 +1,11 @@
+personal/
+.superpowers/
+dist/
+__pycache__/
+*.pyc
+.venv/
+.env
+.env.*
+*.sqlite3*
+# Internal design notes contain personal project identifiers and machine paths.
+docs/superpowers/

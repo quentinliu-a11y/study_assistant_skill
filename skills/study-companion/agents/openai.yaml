@@ -1,0 +1,6 @@
+interface:
+  display_name: "学习伙伴"
+  short_description: "按专业与学习阶段组织课程、解释疑问，并保存有来源的学习记录"
+  default_prompt: "使用 $study-companion，先建立我的专业和学习阶段资料，再开始课程学习与记录。"
+policy:
+  allow_implicit_invocation: true

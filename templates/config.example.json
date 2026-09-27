@@ -1,0 +1,7 @@
+{
+  "schema_version": 1,
+  "profile": {"major": "", "degree_level": ""},
+  "timezone": "Asia/Shanghai",
+  "batch_size": 4,
+  "courses": []
+}
