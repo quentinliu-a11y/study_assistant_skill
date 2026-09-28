@@ -52,6 +52,8 @@ python skills/study-companion/scripts/study_store.py export --db personal/study.
 
 导出得到课程的 `current-state.md` 和 `logs/YYYY-MM-DD.md`。成功保存才推进计数；重复导入/提交不重复记录。保存成功但导出失败时重试 export。备份整个个人目录；Markdown 可以从数据库重新生成，不能只保留 Markdown 期待恢复原始问答和检查点。
 
+同一课程的导出会串行执行，避免旧状态覆盖新状态。导出目录中的隐藏清单记录工具生成的日志；切换时区时，只清理清单内已过期且未被修改的日期日志。若旧日志含手工修改，工具会停止并提示先移走笔记。请将手工笔记另存文件，生成的当前状态与仍有效的日期日志会在重建时覆盖。
+
 ## 学习规则
 
 - Lecture 定范围，Textbook 补解释，Tutorial 与明确考试资料支持重点判断。

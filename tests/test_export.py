@@ -1,10 +1,13 @@
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor, TimeoutError
+from threading import Event
 from pathlib import Path
 from unittest.mock import patch
 from common import turn, summary
 from study_memory.store import import_turns, commit_update
 from study_memory.export import export_course
+from study_memory.io import atomic_text
 
 
 class ExportTests(unittest.TestCase):
@@ -49,3 +52,60 @@ class ExportTests(unittest.TestCase):
         for course, tz in [('../escape','UTC'), ('CON','UTC'), ('aerodynamics','Invalid/Zone')]:
             with self.subTest(course=course, tz=tz), self.assertRaises(ValueError):
                 export_course(self.db, course, self.out, tz)
+
+    def test_concurrent_exports_cannot_regress_to_old_snapshot(self):
+        paused, release = Event(), Event()
+        def pause_old(path, text):
+            if path.name == 'current-state.md' and '课程版本：1；' in text:
+                paused.set()
+                if not release.wait(5):
+                    raise RuntimeError('Test did not release old export')
+            atomic_text(path, text)
+        with patch('study_memory.export.atomic_text', side_effect=pause_old), ThreadPoolExecutor(max_workers=2) as pool:
+            old = pool.submit(export_course,self.db,'aerodynamics',self.out,'Asia/Shanghai')
+            try:
+                self.assertTrue(paused.wait(3))
+                t = turn(3)
+                import_turns(self.db,[t])
+                commit_update(self.db,[('thread-1','turn-3')],summary([t]),1)
+                new = pool.submit(export_course,self.db,'aerodynamics',self.out,'Asia/Shanghai')
+                try:
+                    new.result(timeout=0.25)
+                except TimeoutError:
+                    pass  # Correct implementation serializes behind the paused export.
+            finally:
+                release.set()
+            old.result(timeout=5); new.result(timeout=5)
+        current=(self.out/'aerodynamics/current-state.md').read_text(encoding='utf-8')
+        self.assertIn('课程版本：2；',current)
+        self.assertIn('turn-3',current)
+
+    def test_multiconcept_event_only_renders_still_current_concepts(self):
+        t=turn(3); import_turns(self.db,[t])
+        both=summary([t]); both['events'][0]['concept_ids']=['lift','drag']
+        commit_update(self.db,[('thread-1','turn-3')],both,1)
+        t=turn(4); import_turns(self.db,[t])
+        newer=summary([t]); newer['events'][0].update(concept_ids=['lift'],mastery='can_apply',
+            mastery_evidence=[dict(source_turn_id=['thread-1','turn-4'],quote=t['user_text'])])
+        commit_update(self.db,[('thread-1','turn-4')],newer,2)
+        export_course(self.db,'aerodynamics',self.out,'Asia/Shanghai')
+        current=(self.out/'aerodynamics/current-state.md').read_text(encoding='utf-8')
+        headings=[line for line in current.splitlines() if line.startswith('### ')]
+        self.assertEqual(sum('lift' in line for line in headings),1)
+        self.assertIn('### drag',headings)
+        self.assertIn('可独立应用',current.split('### lift')[1])
+
+    def test_timezone_change_removes_only_obsolete_managed_logs(self):
+        export_course(self.db,'aerodynamics',self.out,'Asia/Shanghai')
+        manual=self.out/'aerodynamics/logs/my-notes.md'; manual.write_text('keep',encoding='utf-8')
+        export_course(self.db,'aerodynamics',self.out,'UTC')
+        self.assertFalse((self.out/'aerodynamics/logs/2026-09-27.md').exists())
+        self.assertTrue((self.out/'aerodynamics/logs/2026-09-26.md').exists())
+        self.assertEqual(manual.read_text(encoding='utf-8'),'keep')
+
+    def test_timezone_change_does_not_delete_manually_edited_old_log(self):
+        export_course(self.db,'aerodynamics',self.out,'Asia/Shanghai')
+        edited=self.out/'aerodynamics/logs/2026-09-27.md'; edited.write_text('personal annotation',encoding='utf-8')
+        with self.assertRaises(ValueError):
+            export_course(self.db,'aerodynamics',self.out,'UTC')
+        self.assertEqual(edited.read_text(encoding='utf-8'),'personal annotation')

@@ -1,5 +1,9 @@
 """Rebuild readable Markdown from an immutable database snapshot."""
 from collections import defaultdict
+import hashlib
+import json
+import re
+import sqlite3
 from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from .io import atomic_text
@@ -32,6 +36,26 @@ def export_course(db_path: Path, course_id: str, output_dir: Path, timezone: str
     base = (output_dir / course_id).resolve()
     if not base.is_relative_to(output_dir):
         raise ValueError('Course directory escapes output directory.')
+    base.mkdir(parents=True, exist_ok=True)
+    lock_path = checked_path(base, '.export-lock.sqlite3')
+    # A separate SQLite file serializes exporters without blocking study commits.
+    lock = sqlite3.connect(lock_path, timeout=30)
+    try:
+        lock.execute('BEGIN IMMEDIATE')
+        return export_locked(db_path, course_id, base, timezone, zone)
+    finally:
+        lock.rollback()
+        lock.close()
+
+
+def checked_path(base: Path, relative: str) -> Path:
+    path = base / relative
+    if not path.resolve().is_relative_to(base):
+        raise ValueError('Export path escapes course directory.')
+    return path
+
+
+def export_locked(db_path, course_id, base, timezone, zone):
     state = read_course(db_path, course_id)
     turns = {turn_key(t): t for t in state['turns']}
     days, latest = defaultdict(list), {}
@@ -60,26 +84,47 @@ def export_course(db_path: Path, course_id: str, output_dir: Path, timezone: str
             newest, next_start = batch_latest, update['next_start']
     header = [f'# {course_id} 学习状态', '', f"课程版本：{state['version']}；时区：{timezone}",
               f"最近学习时间（UTC）：{newest or '无'}", '', '## 下次起点', '', next_start, '', '## 当前概念状态', '']
-    seen = set()
-    for _, event in sorted(latest.values(), key=lambda item: (item[0], item[1]['event_id'])):
-        if event['event_id'] in seen:
-            continue
-        seen.add(event['event_id'])
+    active = {}
+    for concept, (timestamp, event) in latest.items():
+        if event['event_id'] not in active:
+            active[event['event_id']] = (timestamp, dict(event, concept_ids=[]))
+        active[event['event_id']][1]['concept_ids'].append(concept)
+    for _, event in sorted(active.values(), key=lambda item: (item[0], item[1]['event_id'])):
         header.extend(event_lines(event) + ['', '- 来源轮次：' + '; '.join(' / '.join(r) for r in event['source_turn_ids']), ''])
-    paths = []
+    rendered = {}
     for day, sections in sorted(days.items()):
-        path = base / 'logs' / f'{day}.md'
-        if not path.resolve().is_relative_to(output_dir):
-            raise ValueError('Log path escapes output directory.')
         lines = [f'# {course_id} · {day}', '', f"课程版本：{state['version']}；日期按 {timezone} 原始消息时间划分。", '']
         for _, _, section in sorted(sections):
             lines.extend(section)
-        atomic_text(path, '\n'.join(lines) + '\n')
+        rendered[f'logs/{day}.md'] = '\n'.join(lines) + '\n'
+    manifest_path = checked_path(base, '.export-manifest.json')
+    old = json.loads(manifest_path.read_text(encoding='utf-8')) if manifest_path.exists() else {}
+    if not isinstance(old, dict):
+        raise ValueError('Invalid export manifest.')
+    for name, hashes in old.items():
+        if not re.fullmatch(r'logs/\d{4}-\d{2}-\d{2}\.md', name) or not isinstance(hashes, list):
+            raise ValueError('Invalid export manifest entry.')
+        path = checked_path(base, name)
+        if name not in rendered and path.exists() and hashlib.sha256(path.read_bytes()).hexdigest() not in hashes:
+            raise ValueError(f'Obsolete generated log was edited; move your notes before retrying: {name}')
+    desired = {name: [hashlib.sha256(content.encode('utf-8')).hexdigest()] for name, content in rendered.items()}
+    # Journal both generations before writing, so an interrupted export is retryable.
+    pending = {name: list(hashes) for name, hashes in old.items()}
+    for name, hashes in desired.items():
+        pending[name] = sorted(set(pending.get(name, []) + hashes))
+    atomic_text(manifest_path, json.dumps(pending, sort_keys=True) + '\n')
+    paths = []
+    for name, content in rendered.items():
+        path = checked_path(base, name)
+        atomic_text(path, content)
         paths.append(path)
-    path = base / 'current-state.md'
-    if not path.resolve().is_relative_to(output_dir):
-        raise ValueError('State path escapes output directory.')
+    for name in old.keys() - desired.keys():
+        path = checked_path(base, name)
+        if path.exists():
+            path.unlink()
+    path = checked_path(base, 'current-state.md')
     # Publish current-state last. If any daily file fails, retry the whole export.
     atomic_text(path, '\n'.join(header) + '\n')
     paths.append(path)
+    atomic_text(manifest_path, json.dumps(desired, sort_keys=True) + '\n')
     return paths
