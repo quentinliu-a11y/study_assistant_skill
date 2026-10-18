@@ -9,6 +9,7 @@ PUBLIC_FILES = (
     'templates/course/overview.md', 'templates/course/knowledge-map.md',
     'skills/study-companion/SKILL.md', 'skills/study-companion/agents/openai.yaml',
     'skills/study-companion/references/courses.md',
+    'skills/study-companion/references/ifm.md',
     'skills/study-companion/references/learning-protocol.md',
     'skills/study-companion/references/data-contract.md',
     'skills/study-companion/scripts/study_store.py',

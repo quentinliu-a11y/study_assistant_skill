@@ -9,3 +9,6 @@ __pycache__/
 *.sqlite3*
 # Internal design notes contain personal project identifiers and machine paths.
 docs/superpowers/
+
+# Personal course exports must never return to the public repository.
+generated-docs/courses/
