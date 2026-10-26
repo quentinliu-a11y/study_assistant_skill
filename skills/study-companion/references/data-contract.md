@@ -80,3 +80,9 @@ python scripts/study_store.py export --db personal/study.sqlite3 --course aerody
 返回输出路径后回读确认。写入失败不推进处理位置；相同批次和相同摘要重复提交返回原版本，不重复插入。不同摘要不能覆盖已处理批次。数据库已经保存但导出失败时，仅重试 export。
 
 导出目录按课程分组，含 current-state.md 与 logs/YYYY-MM-DD.md；使用原轮次日期。向网页提供最新 current-state.md 后验证读取，不把本地文件存在当作网页同步成功。
+
+## 独立维护的复习 Markdown
+
+`recurring-questions.md` 和 `review-history.md` 放在配置的课程 `resource_dir`，由助手按 [每日回顾规则](recurring-review.md) 直接读写。它们不属于版本 1 JSON 字段，不向 commit 输入添加未支持字段；CLI 不负责语义合并、每日选题或问答触发。
+
+保存完整学习问答仍沿用上述数据库流程；随后在四轮／手动保存时同步维护疑问清单与作答结果。提问或跳过标记及时写入 review-history.md，避免同日跨对话重复。两份文件需单独备份并同步到私有仓库；导出不会刷新它们，也不能代替其保存成功检查。

@@ -7,6 +7,8 @@
 3. 从配置中的 resource_dir 读取 overview.md、knowledge-map.md；若存在课程 SKILL.md，按需读取课程专属教学规则。从 state_dir 读取 current-state.md，并检查更新的日期回顾；两者都相对配置文件所在目录解析。未指定 state_dir 时查找个人导出目录 exports/<course_id>/，不存在则报告尚无状态。只读本题相关来源，必要时回查原件。
 4. 新课程资料不足时先列缺失来源，不把通用学科目录标成用户真实课程。
 
+开始当天学习还要读取 resource_dir 中的 recurring-questions.md、review-history.md；有较新人工记录时不能用旧导出覆盖其判断。按 [每日回顾规则](recurring-review.md) 提问后再进入新内容。私有仓库中这两份文件与 overview.md 同目录；维护本地课程与同步副本时保留新增来源，避免旧副本覆盖较新进度。
+
 IFM 的通用教学要点见 [IFM 课程规则](ifm.md)。个人课程知识地图和日志属于私有资料，应与公开 Skill 仓库分开。GitHub 公开仓库内的文件夹不能单独设为私密；同步个人记录前检查目标仓库为私有，不将个人记录提交到公开仓库。
 
 课程知识资源可随用户个人目录组织。课程间用稳定 concept_id 建立先修与关联关系；跨课程问题有主课程，其他课程只建立引用，避免重复记录同一批问答。

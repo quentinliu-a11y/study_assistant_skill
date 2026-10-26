@@ -21,6 +21,8 @@ description: Use when a user wants course-based study, explanations, exam prepar
 
 首次识别后问：“现在开始学习并记录这门课程吗？”明确要求“开始学习并记录”即已确认，不再重复询问。确认只对当前学习会话生效；支持暂停、结束或切换课程。读取最新状态、未解决疑问和相关先修知识；旧日期的状态不能冒充实时状态。
 
+每天首次开始当前课程的学习时，先读取该课程的 `recurring-questions.md` 和 `review-history.md`，按 [反复疑问与每日回顾](references/recurring-review.md) 选择 1–2 个仍未理解或反复出现的现象提问，等待用户回答后再反馈、继续新内容。同一课程同一天不重复启动；用户可以跳过。没有可用旧记录时如实说明，不编造旧疑问。
+
 ## 课程教学
 
 - 首次建课，先盘点实际可读取的课程资料。Lecture 定框架，Textbook 补解释，Tutorial 和明确考试提示提供练习与优先级依据。扫描页需看图，抽取不到文本不代表空白。
@@ -31,6 +33,8 @@ description: Use when a user wants course-based study, explanations, exam prepar
 ## 更新与保存
 
 遵循 [学习协议](references/learning-protocol.md)。每四个已完成的有效学习问答处理新增内容；“更新学习记录”或结束学习时保存不足四轮的余量。不要每次重写本 Skill。
+
+在上述保存时机同时维护反复疑问清单：保留具体困惑、不同次出现的来源、知识联系和验证状态。每日回顾的提问／跳过标记及时保存以防重复，作答结果随批次整理；“问过”不能写成“答对”。这两份 Markdown 是独立维护的个人记录，不能用数据库导出覆盖。
 
 有本地运行工具时使用 `python scripts/study_store.py --help` 和 [数据合同](references/data-contract.md)，先检查 profile，再导入、提取待处理批次、总结、提交并导出。命令成功且结果回读后才能说已保存；失败保留待处理内容。
 
