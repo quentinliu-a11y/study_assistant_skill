@@ -8,14 +8,17 @@
 
 ## 按你的助手能做什么来选用法
 
-能得到什么功能，取决于助手的能力，不取决于它是哪家的产品。
+能得到什么功能，取决于助手的能力，不取决于它是哪家的产品。每个产品的分步安装说明见 **[INSTALL.zh.md](INSTALL.zh.md)**。
 
-| 你的助手能做到 | 模式 | 用法 |
+| 助手 | 安装什么 | 模式 |
 |---|---|---|
-| 运行命令并加载 Skill 文件夹（Claude Code、Codex CLI 等读取 `SKILL.md` 的智能体） | 完整模式 | 把 `skills/study-companion-zh` 或 `skills/study-companion` 复制到该智能体的 Skill 目录，例如 `~/.claude/skills/`、`~/.codex/skills/` 或 `~/.agents/skills/`。 |
-| 接受上传的 Skill（带 Skill 设置的应用） | 能同时运行代码时为完整模式 | 上传 `python scripts/build_release.py` 生成的压缩包。 |
-| 有项目指令并能读上传文件（聊天应用里的项目功能） | 项目模式 | 把[启动提示词](templates/starter-prompt.zh.md)粘贴到项目指令，并上传你的 `handoff.md`。 |
-| 只能对话（DeepSeek 网页版或其他普通聊天） | 对话模式 | 把[启动提示词](templates/starter-prompt.zh.md)作为第一条消息，然后粘贴你的 `handoff.md`。 |
+| Claude Code | Skill 文件夹放入 `~/.claude/skills/` | 完整模式 |
+| Codex CLI | Skill 文件夹放入 `~/.agents/skills/` | 完整模式 |
+| Claude 应用（网页、桌面） | 在 Customize > Skills 上传发布的压缩包 | 单次对话内为完整模式；跨对话靠 `handoff.md` |
+| ChatGPT | 在 Skills 上传 Skill，或把[启动提示词](templates/starter-prompt.zh.md)粘贴进 Project | 项目模式 |
+| DeepSeek 及其他普通聊天 | 把[启动提示词](templates/starter-prompt.zh.md)作为第一条消息 | 对话模式 |
+| 其他读取 `SKILL.md` 的智能体 | Skill 文件夹放入该工具的 Skill 目录 | 能运行命令即为完整模式 |
+
 
 完整模式下，由本地工具计数、挑选每日回顾题并排定下次回顾日期。项目模式和对话模式下，这些靠助手遵守指令完成，每次学习结束时你需要保存它给出的两段文本。你可以在不同助手之间切换：`handoff.md` 在各模式下是同一份文件。
 
@@ -68,6 +71,7 @@ skills/study-companion-zh/    中文 Skill，结构相同；脚本是副本
 templates/                    启动提示词、配置示例、课程模板
 scripts/sync.py               重新生成中文版脚本副本和启动提示词
 scripts/build_release.py      每个版本生成一个压缩包
+INSTALL.md、INSTALL.zh.md     各助手的安装步骤
 tests/                        使用合成数据的单元测试
 ```
 
@@ -78,6 +82,8 @@ python -m unittest discover -s tests -v
 python scripts/sync.py            # 修改脚本、核心规则或 portable.md 之后运行
 python scripts/build_release.py --out dist
 ```
+
+发布新版本：更新 `VERSION`，合并后推送标签 `v<版本号>`，工作流会生成压缩包并附到 Release。
 
 脚本只在 `skills/study-companion/scripts` 下修改。改规则时两个版本都要改；有一条测试检查两者结构一致。设计说明见 [generated-docs](generated-docs/README.md)。
 
