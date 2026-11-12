@@ -8,14 +8,17 @@ It comes in two editions with the same rules: `study-companion` (English) and `s
 
 ## Pick the setup that matches your assistant
 
-What you get depends on what your assistant can do, not on who makes it.
+What you get depends on what your assistant can do, not on who makes it. Step-by-step instructions for each product are in **[INSTALL.md](INSTALL.md)**.
 
-| Your assistant can | Mode | Setup |
+| Assistant | What to install | Mode |
 |---|---|---|
-| run commands and load skill folders (Claude Code, Codex CLI, and other agents that read `SKILL.md`) | Full | Copy `skills/study-companion` or `skills/study-companion-zh` into the agent's skills folder, for example `~/.claude/skills/`, `~/.codex/skills/`, or `~/.agents/skills/`. |
-| accept an uploaded skill (apps with a skills setting) | Full, if it can also run code | Upload the zip from `python scripts/build_release.py`. |
-| keep project instructions and read uploaded files (project features in chat apps) | Project | Paste the [starter prompt](templates/starter-prompt.en.md) into the project instructions and upload your `handoff.md`. |
-| only chat (DeepSeek's web chat, or any other plain chat) | Chat | Paste the [starter prompt](templates/starter-prompt.en.md) as the first message, then paste your `handoff.md`. |
+| Claude Code | skill folder in `~/.claude/skills/` | Full |
+| Codex CLI | skill folder in `~/.agents/skills/` | Full |
+| Claude app (web, desktop) | upload the release zip under Customize > Skills | Full within a chat; carry `handoff.md` between chats |
+| ChatGPT | upload the skill under Skills, or paste the [starter prompt](templates/starter-prompt.en.md) into a Project | Project |
+| DeepSeek and other plain chats | paste the [starter prompt](templates/starter-prompt.en.md) as the first message | Chat |
+| Other agents that read `SKILL.md` | skill folder in that tool's skills directory | Full if it can run commands |
+
 
 In Full mode a local tool counts exchanges, chooses the daily review questions, and schedules the next review. In Project and Chat modes the assistant does this by following instructions, and you save two pieces of text it gives you at the end of each session. You can move between assistants: `handoff.md` is the same file in every mode.
 
@@ -68,6 +71,7 @@ skills/study-companion-zh/    Chinese skill, same structure; scripts are a copy
 templates/                    starter prompts, config example, course templates
 scripts/sync.py               regenerates the Chinese scripts copy and the starter prompts
 scripts/build_release.py      builds one zip per edition
+INSTALL.md, INSTALL.zh.md     per-assistant installation steps
 tests/                        unit tests on synthetic data
 ```
 
@@ -78,6 +82,8 @@ python -m unittest discover -s tests -v
 python scripts/sync.py            # after editing scripts, core rules, or portable.md
 python scripts/build_release.py --out dist
 ```
+
+To publish a release, update `VERSION`, merge, and push a tag `v<version>`; a workflow builds the zips and attaches them to the release.
 
 Edit scripts only under `skills/study-companion/scripts`. When you change a rule, change it in both editions; a test checks that the two have the same structure. Design notes are in [generated-docs](generated-docs/README.md).
 
