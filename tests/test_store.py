@@ -99,3 +99,24 @@ class StoreTests(unittest.TestCase):
         corrected = summary([new_turn]); corrected['events'][0]['correction_of'] = event_id
         commit_update(self.db, [('thread-1','turn-5')], corrected, 1)
         self.assertEqual(len(read_course(self.db, 'aerodynamics')['updates']), 2)
+
+    def test_database_from_0_1_is_migrated_in_place(self):
+        with closing(sqlite3.connect(self.db)) as conn, conn:
+            conn.executescript("""CREATE TABLE turns (thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, payload TEXT NOT NULL,
+                processed TEXT, PRIMARY KEY(thread_id, turn_id));""")
+            from study_memory.model import validate_turn
+            from study_memory.store import encode
+            for t in self.ts:
+                conn.execute('INSERT INTO turns VALUES (?,?,?,NULL)', (t['thread_id'], t['turn_id'], encode(validate_turn(t))))
+        self.assertEqual(len(pending_batches(self.db)[0]), 4)
+        self.assertEqual(commit_update(self.db, self.ids, summary(self.ts), 0), 1)
+        self.assertEqual(len(read_course(self.db, 'aerodynamics')['turns']), 4)
+        self.assertEqual(read_course(self.db, 'other-course')['turns'], [])
+
+    def test_short_acknowledgements_are_not_mastery_evidence(self):
+        ts = [turn(1, user_text='好的，我懂了')]
+        import_turns(self.db, ts)
+        update = summary(ts); update['events'][0].update(mastery='can_explain',
+            mastery_evidence=[dict(source_turn_id=['thread-1','turn-1'], quote='好的，我懂了')])
+        with self.assertRaises(ValueError):
+            commit_update(self.db, [('thread-1','turn-1')], update, 0)

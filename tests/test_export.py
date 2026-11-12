@@ -8,6 +8,7 @@ from common import turn, summary
 from study_memory.store import import_turns, commit_update
 from study_memory.export import export_course
 from study_memory.io import atomic_text
+from study_memory.review import add_question, mark_review
 
 
 class ExportTests(unittest.TestCase):
@@ -22,7 +23,7 @@ class ExportTests(unittest.TestCase):
 
     def test_cross_day_uses_source_times_and_reexport_is_identical(self):
         paths = export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
-        self.assertEqual({p.name for p in paths}, {'current-state.md','2026-09-26.md','2026-09-27.md'})
+        self.assertEqual({p.name for p in paths}, {'current-state.md','handoff.md','2026-09-26.md','2026-09-27.md'})
         contents = {p: p.read_bytes() for p in paths}
         export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
         self.assertEqual(contents, {p: p.read_bytes() for p in paths})
@@ -33,7 +34,7 @@ class ExportTests(unittest.TestCase):
         with patch('study_memory.export.atomic_text', side_effect=OSError('disk full')):
             with self.assertRaises(OSError):
                 export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
-        self.assertEqual(len(export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')), 3)
+        self.assertEqual(len(export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')), 4)
 
     def test_second_batch_keeps_same_day_history_and_previous_concepts(self):
         t = turn(3)
@@ -109,3 +110,42 @@ class ExportTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             export_course(self.db,'aerodynamics',self.out,'UTC')
         self.assertEqual(edited.read_text(encoding='utf-8'),'personal annotation')
+
+    def test_correction_replaces_the_corrected_event_in_current_state(self):
+        from study_memory.store import read_course
+        old_id = read_course(self.db, 'aerodynamics')['updates'][0]['update']['events'][0]['event_id']
+        t = turn(3); import_turns(self.db, [t])
+        fix = summary([t]); fix['events'][0].update(concept_ids=['adverse-pressure-gradient'], correction_of=old_id,
+                                                    explanation_status='corrected')
+        commit_update(self.db, [('thread-1','turn-3')], fix, 1)
+        export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
+        current = (self.out/'aerodynamics/current-state.md').read_text(encoding='utf-8')
+        self.assertNotIn('### pressure-gradient', current)
+        self.assertIn('### adverse-pressure-gradient', current)
+        self.assertIn('pressure-gradient', (self.out/'aerodynamics/logs/2026-09-27.md').read_text(encoding='utf-8'))
+        self.assertNotIn(old_id, current)          # long ids stay out of Markdown
+        self.assertIn(old_id[:8] + ':0', current)
+
+    def test_english_export_and_handoff_list_open_items(self):
+        add_question(self.db, 'aerodynamics', 'separation', 'why flow separates', 'Explain separation.',
+                     day='2026-09-26', source='thread-1')
+        export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai', 'en')
+        handoff = (self.out/'aerodynamics/handoff.md').read_text(encoding='utf-8')
+        self.assertIn('## Next start', handoff)
+        self.assertIn('pressure-gradient', handoff)
+        self.assertIn('separation | unverified | next review: any time | Explain separation.', handoff)
+
+    def test_review_files_are_generated_and_hand_written_list_is_set_aside(self):
+        base = self.out/'aerodynamics'; base.mkdir(parents=True)
+        (base/'recurring-questions.md').write_text('my own notes', encoding='utf-8')
+        export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
+        self.assertEqual((base/'recurring-questions.md').read_text(encoding='utf-8'), 'my own notes')  # no questions yet
+        add_question(self.db, 'aerodynamics', 'separation', '为什么分离', '解释分离', day='2026-09-26', source='thread-1')
+        add_question(self.db, 'aerodynamics', 'separation', day='2026-09-27', source='thread-2')
+        mark_review(self.db, 'aerodynamics', 'separation', 'incorrect', '2026-09-28')
+        export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')
+        self.assertEqual((base/'recurring-questions.manual-backup.md').read_text(encoding='utf-8'), 'my own notes')
+        generated = (base/'recurring-questions.md').read_text(encoding='utf-8')
+        self.assertIn('反复出现', generated); self.assertIn('2026-09-29', generated)
+        self.assertIn('仍需帮助', (base/'review-history.md').read_text(encoding='utf-8'))
+        export_course(self.db, 'aerodynamics', self.out, 'Asia/Shanghai')  # generated file is overwritten quietly
