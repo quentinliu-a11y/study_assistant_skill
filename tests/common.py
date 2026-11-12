@@ -10,7 +10,7 @@ def turn(n=1, **changes):
     value = dict(schema_version=1, course_id='aerodynamics', session_id='session-1',
                  thread_id='thread-1', turn_id=f'turn-{n}',
                  occurred_at=f'2026-09-27T10:{n:02d}:00+08:00',
-                 user_text=f'问题 {n}', assistant_text=f'解释 {n}', complete=True,
+                 user_text=f'问题 {n}：逆压梯度为什么会导致边界层分离', assistant_text=f'解释 {n}', complete=True,
                  learning_confirmed=True, is_learning=True)
     value.update(changes)
     return value

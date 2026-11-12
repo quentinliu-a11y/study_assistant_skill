@@ -11,13 +11,38 @@ from .updates import reference, validate_update
 SCHEMA = '''
 CREATE TABLE IF NOT EXISTS turns (
   thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, payload TEXT NOT NULL,
-  processed TEXT, PRIMARY KEY(thread_id, turn_id));
+  processed TEXT, course_id TEXT, PRIMARY KEY(thread_id, turn_id));
 CREATE TABLE IF NOT EXISTS versions (course_id TEXT PRIMARY KEY, version INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS updates (
   batch_id TEXT PRIMARY KEY, course_id TEXT NOT NULL, version INTEGER NOT NULL,
   created_at TEXT NOT NULL, payload TEXT NOT NULL, batch_ids TEXT NOT NULL,
   update_hash TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS questions (
+  course_id TEXT NOT NULL, question_id TEXT NOT NULL, payload TEXT NOT NULL,
+  PRIMARY KEY(course_id, question_id));
+CREATE TABLE IF NOT EXISTS reviews (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, course_id TEXT NOT NULL, question_id TEXT NOT NULL,
+  day TEXT NOT NULL, outcome TEXT NOT NULL, note TEXT NOT NULL, source TEXT, created_at TEXT NOT NULL);
 '''
+
+
+def migrate(conn) -> None:
+    """Databases from 0.1.x lack turns.course_id; add and backfill it once."""
+    columns = {row[1] for row in conn.execute('PRAGMA table_info(turns)')}
+    if 'course_id' not in columns:
+        try:
+            conn.execute('ALTER TABLE turns ADD COLUMN course_id TEXT')
+        except sqlite3.OperationalError as error:  # another process migrated first
+            if 'duplicate column' not in str(error):
+                raise
+    missing = conn.execute('SELECT thread_id, turn_id, payload FROM turns WHERE course_id IS NULL').fetchall()
+    if missing:
+        with conn:
+            for row in missing:
+                conn.execute('UPDATE turns SET course_id=? WHERE thread_id=? AND turn_id=?',
+                             (json.loads(row[2])['course_id'], row[0], row[1]))
+    conn.execute('CREATE INDEX IF NOT EXISTS turns_course ON turns(course_id, processed)')
+    conn.execute('CREATE INDEX IF NOT EXISTS reviews_day ON reviews(course_id, day)')
 
 
 @contextmanager
@@ -28,6 +53,7 @@ def connection(path: Path):
     conn.row_factory = sqlite3.Row
     try:
         conn.executescript(SCHEMA)
+        migrate(conn)
         yield conn
     finally:
         conn.close()
@@ -53,11 +79,12 @@ def import_turns(db_path: Path, turns: list[dict]) -> int:
                     continue
                 identity = set(t) - {'assistant_text','complete','revision_hash'}
                 if (old['processed'] or before['complete'] or not t['complete']
-                        or any(before[f] != t[f] for f in identity)):
+                        or any(before.get(f) != t[f] for f in identity)):
                     raise ValueError(f'Conflicting turn revision: {key}; review the branch before importing.')
                 conn.execute('UPDATE turns SET payload=? WHERE thread_id=? AND turn_id=?', (encode(t), *key))
             else:
-                conn.execute('INSERT INTO turns VALUES (?,?,?,NULL)', (*key, encode(t)))
+                conn.execute('INSERT INTO turns (thread_id, turn_id, payload, processed, course_id) VALUES (?,?,?,NULL,?)',
+                             (*key, encode(t), t['course_id']))
                 inserted += 1
     return inserted
 
@@ -99,7 +126,7 @@ def commit_update(db_path: Path, batch_ids: list[tuple[str,str]], update: dict, 
         if len(group) != 1:
             raise ValueError('A batch cannot mix courses, sessions, or threads.')
         course, session, thread = next(iter(group))
-        pending = [json.loads(r['payload']) for r in conn.execute('SELECT payload FROM turns WHERE processed IS NULL')]
+        pending = [json.loads(r['payload']) for r in conn.execute('SELECT payload FROM turns WHERE processed IS NULL AND course_id=?', (course,))]
         same = [t for t in pending if eligible(t) and (t['course_id'],t['session_id'],t['thread_id']) == (course,session,thread)]
         earliest = sorted(same, key=lambda t: (t['occurred_at'], t['turn_id']))[:len(keys)]
         if set(keys) != {turn_key(t) for t in earliest}:
@@ -135,6 +162,6 @@ def read_course(db_path: Path, course_id: str) -> dict:
         for row in conn.execute('SELECT * FROM updates WHERE course_id=? ORDER BY version', (course_id,)):
             result['updates'].append(dict(batch_id=row['batch_id'], version=row['version'],
                                           created_at=row['created_at'], update=json.loads(row['payload'])))
-        result['turns'] = [t for row in conn.execute('SELECT payload FROM turns WHERE processed IS NOT NULL')
-                           if (t := json.loads(row['payload']))['course_id'] == course_id]
+        result['turns'] = [json.loads(row['payload']) for row in conn.execute(
+            'SELECT payload FROM turns WHERE processed IS NOT NULL AND course_id=?', (course_id,))]
     return result

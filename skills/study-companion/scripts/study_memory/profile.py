@@ -3,6 +3,8 @@ from pathlib import Path
 from .io import read_json, write_json
 
 DEGREES = {'undergraduate', 'postgraduate', 'masters', 'doctoral'}
+LANGUAGES = ('en', 'zh')
+DEFAULT_TIMEZONE = 'Asia/Shanghai'
 
 
 def missing_profile_fields(config: dict) -> list[str]:
@@ -17,19 +19,33 @@ def missing_profile_fields(config: dict) -> list[str]:
     return missing
 
 
-def save_profile(path: Path, major: str, degree_level: str) -> dict:
+def language_of(config: dict) -> str:
+    """Configs written before 0.2 have no language and were Chinese."""
+    return config.get('language') if config.get('language') in LANGUAGES else 'zh'
+
+
+def save_profile(path: Path, major: str, degree_level: str, language: str | None = None,
+                 timezone: str | None = None) -> dict:
     profile = {'major': major, 'degree_level': degree_level}
     if missing_profile_fields({'profile': profile}):
-        raise ValueError('请填写专业，以及本科或研究生阶段。')
+        raise ValueError('Give a major and a study level: undergraduate, masters, doctoral or postgraduate.')
+    if language is not None and language not in LANGUAGES:
+        raise ValueError('language must be en or zh.')
     profile['major'] = major.strip()
     path = Path(path)
-    config = read_json(path) if path.exists() else {}
+    existed = path.exists()
+    config = read_json(path) if existed else {}
     if not isinstance(config, dict):
-        raise ValueError('配置必须是 JSON 对象。')
+        raise ValueError('The config file must hold a JSON object.')
     config.setdefault('schema_version', 1)
-    config.setdefault('timezone', 'Asia/Shanghai')
-    config.setdefault('batch_size', 4)
+    config.setdefault('timezone', DEFAULT_TIMEZONE)
+    config.setdefault('language', 'zh' if existed else 'en')
     config.setdefault('courses', [])
+    config.pop('batch_size', None)  # fixed at four turns; no longer configurable
+    if language:
+        config['language'] = language
+    if timezone:
+        config['timezone'] = timezone
     config['profile'] = profile
     write_json(path, config)
     return config

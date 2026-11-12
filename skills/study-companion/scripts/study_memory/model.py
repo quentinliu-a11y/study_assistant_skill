@@ -1,5 +1,5 @@
 """Validate external data before counting or writing it."""
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 import hashlib
 import json
 import re
@@ -29,6 +29,15 @@ def parse_time(value: str) -> datetime:
     return result.astimezone(timezone.utc)
 
 
+def parse_day(value: str) -> str:
+    if not isinstance(value, str):
+        raise ValueError('Dates must be YYYY-MM-DD.')
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError as error:
+        raise ValueError('Dates must be YYYY-MM-DD.') from error
+
+
 def digest(value) -> str:
     data = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(',', ':'), allow_nan=False)
     return hashlib.sha256(data.encode('utf-8')).hexdigest()
@@ -50,6 +59,11 @@ def validate_turn(raw: dict) -> dict:
     if not isinstance(t['assistant_text'], str) or (t['complete'] and not t['assistant_text'].strip()):
         raise ValueError('A completed turn needs its full assistant response.')
     t['occurred_at'] = parse_time(t['occurred_at']).isoformat()
+    # Optional marker, only stored when set, so hashes of ordinary turns stay unchanged.
+    if raw.get('source_kind') is not None:
+        if raw['source_kind'] != 'digest':
+            raise ValueError("source_kind may only be 'digest'.")
+        t['source_kind'] = 'digest'
     t['revision_hash'] = digest(t)
     if 'revision_hash' in raw and raw['revision_hash'] != t['revision_hash']:
         raise ValueError('Turn revision_hash does not match the content.')

@@ -1,7 +1,9 @@
 """Validate summary provenance; pedagogical interpretation remains human/agent work."""
 import copy
+import re
 from .model import turn_key
 
+MIN_EVIDENCE_CHARS = 8
 MASTERY = {'unverified', 'needs_help', 'can_explain', 'can_apply'}
 
 
@@ -63,8 +65,8 @@ def validate_update(raw: dict, turns: list[dict], known_events: set[str]) -> dic
             if (ref not in refs or not isinstance(quote, str) or not quote.strip()
                     or quote not in source[ref]['user_text']):
                 raise ValueError('Evidence quote must occur in a referenced user message.')
-            if event['mastery'] in ('can_explain','can_apply') and quote.strip(' 。.!！') in ('好','懂了','明白了','OK','ok'):
-                raise ValueError('Acknowledgement alone does not establish mastery.')
+            if event['mastery'] in ('can_explain','can_apply') and len(re.sub(r'[\W_]+', '', quote)) < MIN_EVIDENCE_CHARS:
+                raise ValueError(f'Mastery evidence must quote at least {MIN_EVIDENCE_CHARS} letters or characters of the learner\'s own answer.')
         correction = event['correction_of']
         if correction is not None and (not isinstance(correction,str) or correction not in known_events):
             raise ValueError('correction_of must reference an existing event in this course.')
